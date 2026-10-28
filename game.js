@@ -18,6 +18,7 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.existing(this.coin);
     this.coin.body.setCircle(9);
     this.placeCoin();
+    this.pulseCoin();
     this.drones = this.physics.add.group();
     for (let i = 0; i < c.droneCount; i++) {
       const drone = this.add.rectangle(90 + i * 270, 100, 26, 26, c.colors.drone);
@@ -29,9 +30,10 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coin, () => {
       if (this.finished) return;
       this.score++;
+      this.coinBurst(this.coin.x, this.coin.y);
       this.placeCoin();
     });
-    this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
+    this.physics.add.overlap(this.player, this.drones, () => { this.hitFeedback(); this.finish('A drone caught you!'); });
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
@@ -47,6 +49,33 @@ class CoinDash extends Phaser.Scene {
     } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60);
     this.coin.setPosition(x, y);
     this.coin.body.reset(x, y);
+  }
+
+  pulseCoin() {
+    this.tweens.add({ targets: this.coin, scale: 1.18, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+
+  coinBurst(x, y) {
+    if (!this.textures.exists('spark')) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0xffffff, 1).fillCircle(4, 4, 4).generateTexture('spark', 8, 8);
+      g.destroy();
+    }
+    const burst = this.add.particles(x, y, 'spark', {
+      speed: { min: 70, max: 190 }, scale: { start: 1.2, end: 0 }, alpha: { start: 1, end: 0 },
+      lifespan: 420, tint: COIN_DASH.colors.coin, emitting: false
+    });
+    burst.explode(14);
+    this.time.delayedCall(500, () => burst.destroy());
+    const label = this.add.text(x, y - 12, '+1', { font: 'bold 18px monospace', color: '#ffd166' }).setOrigin(0.5);
+    this.tweens.add({ targets: label, y: y - 48, alpha: { value: 0, delay: 250, duration: 400 }, duration: 650, ease: 'Cubic.easeOut',
+      onComplete: () => label.destroy() });
+  }
+
+  hitFeedback() {
+    if (this.finished) return;
+    this.cameras.main.shake(250, 0.012);
+    this.cameras.main.flash(180, 255, 60, 80);
   }
 
   update() {
