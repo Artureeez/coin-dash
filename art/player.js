@@ -164,7 +164,6 @@ COIN_DASH_ART.on('hit', (scene, { fatal, invulnerableMs }) => {
   st.face.setTexture('player-face-hurt').setPosition(0, 0);
   scene.tweens.add({ targets: st.skin, scaleX: 1, scaleY: 1, angle: -12, duration: 160, ease: 'Back.easeOut' });
 });
-});
 
 COIN_DASH_ART.on('finish', scene => {
   const st = scene.playerArt;
