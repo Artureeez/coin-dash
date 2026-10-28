@@ -105,15 +105,6 @@
       bar.lineStyle(1, teal, 0.85).lineBetween(0, HUD_H - 0.5, W, HUD_H - 0.5);
       bar.fillStyle(teal, 1).fillRect(10, 14, 2, 16); // small accent tick left of the HUD text
 
-      // Title tag on the right of the bar (HUD text only uses the left half).
-      scene.add.text(W - 18, HUD_H / 2, 'COIN DASH', {
-        fontFamily: MONO, fontSize: '13px', fontStyle: 'bold', color: hex(teal),
-        letterSpacing: 4, resolution: 2
-      }).setOrigin(1, 0.5).setAlpha(0.6).setDepth(-1);
-      bar.fillStyle(gold, 0.9);
-      bar.fillTriangle(W - 136, HUD_H / 2 - 5, W - 131, HUD_H / 2, W - 136, HUD_H / 2 + 5);
-      bar.fillTriangle(W - 136, HUD_H / 2 - 5, W - 141, HUD_H / 2, W - 136, HUD_H / 2 + 5);
-
       // Gold glint on the underline, flashed on each coin.
       const glint = scene.add.rectangle(W / 2, HUD_H - 1, W, 3, gold, 1).setAlpha(0).setDepth(-1);
 
@@ -144,7 +135,7 @@
       scene.tweens.add({ targets: dim, alpha: 0.62, duration: 250 });
 
       const panel = scene.add.container(W / 2, H / 2).setDepth(21);
-      const PW = 440, PHt = 224;
+      const PW = 440, PHt = 260;
       const g = scene.add.graphics();
       g.fillStyle(INK, 0.97).fillRoundedRect(-PW / 2, -PHt / 2, PW, PHt, 14);
       g.lineStyle(10, accent, 0.07).strokeRoundedRect(-PW / 2 - 4, -PHt / 2 - 4, PW + 8, PHt + 8, 18);
@@ -176,13 +167,43 @@
       }
 
       if (lines[2]) {
-        const prompt = text(86, lines.slice(2).join('\n'), '15px', hex(teal), glowOf(hex(teal)));
+        const prompt = text(94, lines.slice(2).join('\n'), '15px', hex(teal), glowOf(hex(teal)));
         scene.tweens.add({ targets: prompt, alpha: { from: 1, to: 0.45 },
           duration: 800, ease: 'Sine.easeInOut', yoyo: true, repeat: -1, delay: 400 });
       }
 
       panel.setAlpha(0).setScale(0.9);
       scene.tweens.add({ targets: panel, alpha: 1, scale: 1, duration: 280, ease: 'Back.easeOut' });
+    },
+
+    // Start and pause screens. The first line is the title, the rest are prompts.
+    // Returns the objects so game.js can destroy them when the overlay closes.
+    overlay(scene, message) {
+      const c = COIN_DASH;
+      const W = c.width, H = c.height, teal = c.colors.player;
+      const lines = String(message).split('\n');
+      const dim = scene.add.rectangle(W / 2, H / 2, W, H, 0x03060d, 1).setDepth(20).setAlpha(0.55);
+      const panel = scene.add.container(W / 2, H / 2).setDepth(21);
+      const PW = 420, PHt = 170;
+      const g = scene.add.graphics();
+      g.fillStyle(INK, 0.97).fillRoundedRect(-PW / 2, -PHt / 2, PW, PHt, 14);
+      g.lineStyle(5, teal, 0.16).strokeRoundedRect(-PW / 2 - 1, -PHt / 2 - 1, PW + 2, PHt + 2, 15);
+      g.lineStyle(2, teal, 1).strokeRoundedRect(-PW / 2, -PHt / 2, PW, PHt, 14);
+      panel.add(g);
+      const glow = { shadow: { offsetX: 0, offsetY: 0, color: hex(teal), blur: 10, fill: true },
+        padding: { x: 10, y: 6 } };
+      panel.add(scene.add.text(0, -30, lines[0] || '', Object.assign({
+        fontFamily: MONO, fontSize: '30px', fontStyle: 'bold', color: hex(teal),
+        letterSpacing: 3, resolution: 2
+      }, glow)).setOrigin(0.5));
+      const prompt = scene.add.text(0, 30, lines.slice(1).join('\n'), {
+        fontFamily: MONO, fontSize: '15px', fontStyle: 'bold', color: '#c9d6e8',
+        align: 'center', lineSpacing: 6, resolution: 2
+      }).setOrigin(0.5);
+      panel.add(prompt);
+      scene.tweens.add({ targets: prompt, alpha: { from: 1, to: 0.5 },
+        duration: 800, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 });
+      return [dim, panel];
     }
   };
 

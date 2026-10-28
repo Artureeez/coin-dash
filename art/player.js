@@ -85,7 +85,7 @@ COIN_DASH_ART.on('create', scene => {
   });
   const st = scene.playerArt = {
     skin, shell, face, shadow, trail, burst,
-    pop: 0, hop: 0, nextTrail: 0, blinkAt: scene.time.now + 2500, happyUntil: 0, done: false
+    pop: 0, hop: 0, nextTrail: 0, blinkAt: scene.time.now + 2500, happyUntil: 0, hurtUntil: 0, done: false
   };
   // Follow the body after physics has moved it this frame, so the skin never lags behind.
   const follow = () => {
@@ -116,7 +116,8 @@ COIN_DASH_ART.on('update', (scene, { time, delta, dx, dy }) => {
   st.shadow.setScale(Phaser.Math.Linear(st.shadow.scaleX, moving ? 0.85 : 1, ease), 1);
 
   let mood = 'open';
-  if (now < st.happyUntil) mood = 'happy';
+  if (now < st.hurtUntil) mood = 'hurt';
+  else if (now < st.happyUntil) mood = 'happy';
   else if (now > st.blinkAt + 120) st.blinkAt = now + Phaser.Math.Between(2200, 4800);
   else if (now > st.blinkAt) mood = 'blink';
   st.face.setTexture('player-face-' + mood);
@@ -141,15 +142,28 @@ COIN_DASH_ART.on('coin', scene => {
   });
 });
 
-COIN_DASH_ART.on('hit', scene => {
+COIN_DASH_ART.on('hit', (scene, { fatal, invulnerableMs }) => {
   const st = scene.playerArt;
   if (!st) return;
-  st.done = true;
-  st.face.setTexture('player-face-hurt').setPosition(0, 0);
   st.shell.setTintFill(0xffffff);
   scene.time.delayedCall(90, () => st.shell.clearTint());
-  st.burst.explode(22, st.skin.x, st.skin.y);
+  st.burst.explode(fatal ? 22 : 12, st.skin.x, st.skin.y);
+  if (!fatal) {
+    // Lost a life: wince, then blink while invulnerable.
+    st.hurtUntil = scene.time.now + 500;
+    scene.tweens.add({
+      targets: [st.skin, st.shadow], alpha: 0.25, duration: 125, yoyo: true,
+      repeat: Math.max(0, Math.round(invulnerableMs / 250) - 1),
+      onComplete: () => { st.skin.setAlpha(1); st.shadow.setAlpha(1); }
+    });
+    return;
+  }
+  st.done = true;
+  scene.tweens.killTweensOf([st.skin, st.shadow]);
+  st.skin.setAlpha(1);
+  st.face.setTexture('player-face-hurt').setPosition(0, 0);
   scene.tweens.add({ targets: st.skin, scaleX: 1, scaleY: 1, angle: -12, duration: 160, ease: 'Back.easeOut' });
+});
 });
 
 COIN_DASH_ART.on('finish', scene => {

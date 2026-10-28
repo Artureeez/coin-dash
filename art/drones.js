@@ -56,18 +56,22 @@ COIN_DASH_ART.texture(scene => {
   g.destroy();
 });
 
-// Overlays are stored on the drone itself, so they go away with it on restart.
-COIN_DASH_ART.on('create', scene => {
-  scene.drones.getChildren().forEach((drone, i) => {
-    drone.artPhase = i * 1.7;
-    drone.artFrame = 0;
-    drone.artShadow = scene.add.ellipse(drone.x + 3, drone.y + 12, 26, 9, 0x000000, 0.35);
-    drone.artGlow = scene.add.image(drone.x, drone.y, 'drone-glow').setBlendMode(Phaser.BlendModes.ADD);
-    drone.artShadow.setBelow(drone);
-    drone.artGlow.setBelow(drone);
-    const v = drone.body.velocity;
-    drone.rotation = Math.atan2(v.y, v.x);
-  });
+// Fired for every drone, including ones that join on level-up. Overlays are stored on the
+// drone itself, so they go away with it on restart.
+COIN_DASH_ART.on('drone', (scene, { drone }) => {
+  drone.artPhase = scene.drones.getLength() * 1.7;
+  drone.artFrame = 0;
+  drone.artShadow = scene.add.ellipse(drone.x + 3, drone.y + 12, 26, 9, 0x000000, 0.35);
+  drone.artGlow = scene.add.image(drone.x, drone.y, 'drone-glow').setBlendMode(Phaser.BlendModes.ADD);
+  drone.artShadow.setBelow(drone);
+  drone.artGlow.setBelow(drone);
+  const v = drone.body.velocity;
+  drone.rotation = Math.atan2(v.y, v.x);
+  // Late arrivals fade in instead of popping into view ('update' drives the glow and shadow).
+  if (scene.started) {
+    drone.setAlpha(0);
+    scene.tweens.add({ targets: drone, alpha: 1, duration: 400 });
+  }
 });
 
 COIN_DASH_ART.on('update', (scene, { time, delta }) => {
@@ -95,8 +99,8 @@ COIN_DASH_ART.on('update', (scene, { time, delta }) => {
 });
 
 // The drone that caught the player flashes white and sends out a shock ring.
-COIN_DASH_ART.on('hit', (scene, { drone }) => {
-  drone.artCaught = true;
+COIN_DASH_ART.on('hit', (scene, { drone, fatal }) => {
+  if (fatal) drone.artCaught = true;
   let flashes = 0;
   scene.time.addEvent({
     delay: 70, repeat: 7, callback: () => {
