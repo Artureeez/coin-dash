@@ -7,5 +7,8 @@ window.COIN_DASH = {
   droneSpeed: 105,
   droneCount: 3,
   highScoreKey: 'coinDash.highScore',
+  coinsPerLevel: 10,     // every N coins a drone joins and drones speed up
+  droneSpeedBoost: 1.1,  // drone speed multiplier per level
+  maxDrones: 8,
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };

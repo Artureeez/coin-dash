@@ -9,10 +9,14 @@ class CoinDash extends Phaser.Scene {
     this.finished = false;
     this.started = false;
     this.paused = false;
+    this.level = 1;
+    this.droneSpeed = c.droneSpeed;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
+    this.levelText = this.add.text(c.width - 18, 12, 'Level 1', { font: '18px monospace', color: '#ffffff' })
+      .setOrigin(1, 0);
     this.player = this.add.rectangle(c.width / 2, c.height / 2, 24, 24, c.colors.player);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
@@ -31,6 +35,7 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coin, () => {
       if (this.finished) return;
       this.score++;
+      if (this.score % c.coinsPerLevel === 0) this.levelUp();
       this.placeCoin();
     });
     this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
@@ -89,11 +94,12 @@ class CoinDash extends Phaser.Scene {
   placeCoin() {
     const c = COIN_DASH;
     // Avoid spawning the next coin directly underneath the player.
-    let x, y;
+    let x, y, attempts = 0;
     do {
       x = Phaser.Math.Between(25, c.width - 25);
       y = Phaser.Math.Between(70, c.height - 25);
-    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60);
+    } while ((Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60
+      || this.nearDrone(x, y, 40)) && ++attempts < 50);
     this.coin.setPosition(x, y);
     this.coin.body.reset(x, y);
   }
@@ -111,6 +117,32 @@ class CoinDash extends Phaser.Scene {
     try {
       window.localStorage.setItem(COIN_DASH.highScoreKey, String(value));
     } catch (e) { /* storage unavailable; keep the in-memory best only */ }
+  }
+
+  nearDrone(x, y, radius) {
+    // Drones don't exist yet when the first coin is placed in create().
+    if (!this.drones) return false;
+    return this.drones.getChildren().some(d => Phaser.Math.Distance.Between(x, y, d.x, d.y) < radius);
+  }
+
+  levelUp() {
+    const c = COIN_DASH;
+    this.level++;
+    this.levelText.setText(`Level ${this.level}`);
+    this.droneSpeed *= c.droneSpeedBoost;
+    this.drones.getChildren().forEach(d => d.body.velocity.scale(c.droneSpeedBoost));
+    if (this.drones.getLength() >= c.maxDrones) return;
+    // Spawn the new drone well away from the player.
+    let x, y, attempts = 0;
+    do {
+      x = Phaser.Math.Between(30, c.width - 30);
+      y = Phaser.Math.Between(75, c.height - 30);
+    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 150 && ++attempts < 50);
+    const drone = this.add.rectangle(x, y, 26, 26, c.colors.drone);
+    this.drones.add(drone);
+    drone.body.setCollideWorldBounds(true).setBounce(1, 1);
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    drone.body.setVelocity(Math.cos(angle) * this.droneSpeed, Math.sin(angle) * this.droneSpeed);
   }
 
   update() {
