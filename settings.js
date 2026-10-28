@@ -12,5 +12,10 @@ window.COIN_DASH = {
   maxDrones: 8,
   lives: 3,
   invulnerableMs: 1500,
+  droneTurnRate: 2.2,        // max heading change in rad/s; lower = easier to dodge
+  droneTurnJitter: 0.25,     // each drone's turn rate varies by up to +/- this fraction
+  droneWobble: 0.35,         // rad of per-drone weave around the direct line to the target
+  droneSeparation: 70,       // px; drones closer than this push their headings apart
+  droneSeparationWeight: 1.5,
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };

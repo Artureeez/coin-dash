@@ -68,6 +68,10 @@ class CoinDash extends Phaser.Scene {
     drone.body.setSize(26, 26);
     drone.body.setCollideWorldBounds(true).setBounce(1, 1);
     drone.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    // Per-drone quirks so the pack spreads out instead of tracing identical paths.
+    const j = COIN_DASH.droneTurnJitter;
+    drone.steerTurn = COIN_DASH.droneTurnRate * Phaser.Math.FloatBetween(1 - j, 1 + j);
+    drone.steerPhase = Phaser.Math.FloatBetween(0, Math.PI * 2);
     COIN_DASH_ART.emit('drone', this, { drone });
     return drone;
   }
@@ -155,6 +159,38 @@ class CoinDash extends Phaser.Scene {
     this.addDrone(x, y, Phaser.Math.FloatBetween(0, Math.PI * 2), this.droneSpeed);
   }
 
+  // Single place that decides who a drone chases.
+  droneTarget(drone) {
+    return this.player;
+  }
+
+  // Turn each drone's heading toward its target at a capped rate, keeping speed at droneSpeed.
+  // The random push from addDrone() is the starting heading; world-bound bounces still apply.
+  steerDrones(time, delta) {
+    const c = COIN_DASH;
+    const dt = Math.min(delta, 50) / 1000; // a long frame after a tab switch shouldn't snap headings
+    const drones = this.drones.getChildren();
+    drones.forEach(drone => {
+      const target = this.droneTarget(drone);
+      if (!target) return;
+      const want = new Phaser.Math.Vector2(target.x - drone.x, target.y - drone.y).normalize();
+      // Push away from close neighbours, stronger the closer they are.
+      drones.forEach(other => {
+        if (other === drone) return;
+        const d = Phaser.Math.Distance.Between(drone.x, drone.y, other.x, other.y);
+        if (d > 0 && d < c.droneSeparation) {
+          const push = c.droneSeparationWeight * (1 - d / c.droneSeparation) / d;
+          want.x += (drone.x - other.x) * push;
+          want.y += (drone.y - other.y) * push;
+        }
+      });
+      const goal = Math.atan2(want.y, want.x) + Math.sin(time / 600 + drone.steerPhase) * c.droneWobble;
+      const v = drone.body.velocity;
+      const heading = Phaser.Math.Angle.RotateTo(Math.atan2(v.y, v.x), goal, drone.steerTurn * dt);
+      drone.body.setVelocity(Math.cos(heading) * this.droneSpeed, Math.sin(heading) * this.droneSpeed);
+    });
+  }
+
   hitByDrone(drone) {
     if (this.finished || this.time.now < this.invulnerableUntil) return;
     this.lives--;
@@ -185,6 +221,7 @@ class CoinDash extends Phaser.Scene {
         - Number(this.cursors.up.isDown || this.keys.W.isDown);
       const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
       this.player.body.setVelocity(direction.x, direction.y);
+      this.steerDrones(time, delta);
     }
     this.hud.setText(`Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`);
     // Art keeps animating on the start screen; while paused it holds still.
