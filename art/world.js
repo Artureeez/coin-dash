@@ -176,6 +176,104 @@
       scene.tweens.add({ targets: panel, alpha: 1, scale: 1, duration: 280, ease: 'Back.easeOut' });
     },
 
+    // First-load opening screen. opts: { title, best, prompt, rules: [{ icon, text }],
+    // controls: [{ keys: [...], label }] }. icon is a texture key or a short glyph.
+    // Same contract as overlay(): returns the objects to destroy.
+    rulesScreen(scene, opts) {
+      const c = COIN_DASH;
+      const W = c.width, H = c.height, teal = c.colors.player, gold = c.colors.coin;
+      const PW = Math.min(680, W - 40), PHt = Math.min(456, H - 40);
+      const top = -PHt / 2, left = -PW / 2;
+      const glyphColor = { '♥': c.colors.drone };
+      const glowOf = (col, blur) => ({ shadow: { offsetX: 0, offsetY: 0, color: hex(col), blur, fill: true },
+        padding: { x: 10, y: 6 } });
+      const font = (size, color, extra) => Object.assign({
+        fontFamily: MONO, fontSize: size, fontStyle: 'bold', color, resolution: 2
+      }, extra);
+
+      const dim = scene.add.rectangle(W / 2, H / 2, W, H, 0x03060d, 1).setDepth(20).setAlpha(0.7);
+      const panel = scene.add.container(W / 2, H / 2).setDepth(21);
+      const g = scene.add.graphics();
+      g.fillStyle(INK, 0.97).fillRoundedRect(left, top, PW, PHt, 14);
+      g.lineStyle(10, teal, 0.06).strokeRoundedRect(left - 4, top - 4, PW + 8, PHt + 8, 18);
+      g.lineStyle(5, teal, 0.16).strokeRoundedRect(left - 1, top - 1, PW + 2, PHt + 2, 15);
+      g.lineStyle(2, teal, 1).strokeRoundedRect(left, top, PW, PHt, 14);
+      g.lineStyle(1, teal, 0.25).lineBetween(left + 40, top + 108, -left - 40, top + 108);
+      g.lineStyle(1, teal, 0.25).lineBetween(left + 40, top + PHt - 108, -left - 40, top + PHt - 108);
+      panel.add(g);
+
+      panel.add(scene.add.text(0, top + 44, opts.title || '', font('38px', hex(teal),
+        Object.assign({ letterSpacing: 6 }, glowOf(teal, 14)))).setOrigin(0.5));
+      panel.add(scene.add.text(0, top + 84, `HIGH SCORE  ${opts.best || 0}`,
+        font('14px', hex(gold), Object.assign({ letterSpacing: 3 }, glowOf(gold, 8)))).setOrigin(0.5));
+
+      // Rules stack top-down at their real (possibly wrapped) height, then shrink to fit,
+      // so lines appended later never spill out of the panel.
+      const list = scene.add.container(0, 0);
+      const textX = left + 92, wrap = PW - 132;
+      let y = 0;
+      (opts.rules || []).forEach(rule => {
+        const t = scene.add.text(textX, y, rule.text, font('15px', '#dbe6f3',
+          { wordWrap: { width: wrap }, lineSpacing: 4 }));
+        const cy = y + Math.min(t.height, 24) / 2;
+        let icon;
+        if (scene.textures.exists(rule.icon)) {
+          icon = scene.add.image(left + 64, cy, rule.icon);
+          icon.setScale(24 / Math.max(icon.width, icon.height));
+        } else {
+          // A missing texture key falls back to a bullet rather than printing the key name.
+          const glyph = rule.icon && rule.icon.length <= 2 ? rule.icon : '•';
+          const col = glyphColor[glyph] || teal;
+          icon = scene.add.text(left + 64, cy, glyph, font('18px', hex(col), glowOf(col, 6)))
+            .setOrigin(0.5);
+        }
+        list.add([icon, t]);
+        y += Math.max(t.height, 24) + 12;
+      });
+      const listTop = top + 124, listRoom = PHt - 124 - 124;
+      const listH = Math.max(0, y - 12);
+      const fit = Math.min(1, listRoom / Math.max(1, listH));
+      list.setScale(fit).setPosition(0, listTop + (listRoom - listH * fit) / 2);
+      panel.add(list);
+
+      // Controls as key caps in one centred row, shrunk if it gets too wide.
+      const row = scene.add.container(0, 0);
+      let x = 0;
+      (opts.controls || []).forEach((ctl, i) => {
+        if (i) x += 26;
+        ctl.keys.forEach((key, k) => {
+          if (k) {
+            const or = scene.add.text(x + 4, 0, '/', font('13px', '#5f7392')).setOrigin(0, 0.5);
+            row.add(or);
+            x += or.width + 8;
+          }
+          const label = scene.add.text(x + 8, 0, key, font('13px', '#e9fffa')).setOrigin(0, 0.5);
+          const cap = scene.add.graphics();
+          cap.fillStyle(0x13213a, 1).fillRoundedRect(x, -13, label.width + 16, 26, 5);
+          cap.lineStyle(1, teal, 0.7).strokeRoundedRect(x + 0.5, -12.5, label.width + 15, 25, 5);
+          cap.fillStyle(teal, 0.35).fillRect(x + 4, 10, label.width + 8, 1);
+          row.add([cap, label]);
+          x += label.width + 16;
+        });
+        const what = scene.add.text(x + 8, 0, ctl.label, font('13px', '#8fa1ba')).setOrigin(0, 0.5);
+        row.add(what);
+        x += what.width + 8;
+      });
+      const rowFit = Math.min(1, (PW - 60) / Math.max(1, x));
+      row.setScale(rowFit).setPosition(-x * rowFit / 2, top + PHt - 82);
+      panel.add(row);
+
+      const prompt = scene.add.text(0, top + PHt - 36, opts.prompt || '',
+        font('17px', hex(teal), Object.assign({ letterSpacing: 2 }, glowOf(teal, 10)))).setOrigin(0.5);
+      panel.add(prompt);
+      scene.tweens.add({ targets: prompt, alpha: { from: 1, to: 0.45 },
+        duration: 800, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 });
+
+      panel.setAlpha(0).setScale(0.96);
+      scene.tweens.add({ targets: panel, alpha: 1, scale: 1, duration: 260, ease: 'Quad.easeOut' });
+      return [dim, panel];
+    },
+
     // Start and pause screens. The first line is the title, the rest are prompts.
     // Returns the objects so game.js can destroy them when the overlay closes.
     overlay(scene, message) {

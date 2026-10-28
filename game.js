@@ -57,8 +57,33 @@ class CoinDash extends Phaser.Scene {
     if (data && data.skipStart) this.startRound();
     else {
       this.physics.pause();
-      this.showOverlay('COIN DASH\nPress SPACE or ENTER to start\nP pauses');
+      this.overlay = COIN_DASH_ART.world.rulesScreen(this, {
+        title: 'COIN DASH', best: this.best, rules: this.rules(), controls: this.controls(),
+        prompt: 'Press SPACE or ENTER to start'
+      });
     }
+  }
+
+  // Start-screen text as data, built from settings so it stays true when tuning changes.
+  // icon is a texture key or a short glyph; append entries here as features land.
+  rules() {
+    const c = COIN_DASH;
+    return [
+      { icon: 'coin', text: `Collect as many coins as you can in ${c.roundSeconds} seconds.` },
+      { icon: 'drone', text: 'Dodge the drones: every touch costs a life.' },
+      { icon: '♥', text: `${c.lives} lives. After a hit you are safe for ${c.invulnerableMs / 1000}s.` },
+      { icon: '▲', text: `Every ${c.coinsPerLevel} coins: level up. Drones get faster`
+        + ` and one more joins, up to ${c.maxDrones}.` }
+    ];
+  }
+
+  // Key caps shown under the rules: keys are drawn on caps, label says what they do.
+  controls() {
+    return [
+      { keys: ['←↑↓→', 'WASD'], label: 'move' },
+      { keys: ['P'], label: 'pause' },
+      { keys: ['R'], label: 'restart' }
+    ];
   }
 
   // New drones are announced to art/ so they get the same look as the starting ones.
