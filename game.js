@@ -215,5 +215,6 @@ window.coinDashGame = new Phaser.Game({
   backgroundColor: COIN_DASH.colors.background,
   physics: { default: 'arcade', arcade: { debug: false } },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-  scene: CoinDash
+  // The intro cutscene (art/intro.js) plays first when it is loaded, then starts CoinDash.
+  scene: [window.CoinDashIntro, CoinDash].filter(Boolean)
 });
