@@ -32,6 +32,7 @@ class CoinDash extends Phaser.Scene {
     this.player.body.setCollideWorldBounds(true);
     this.coin = this.physics.add.image(100, 100, 'coin');
     this.coin.body.setCircle(9, this.coin.width / 2 - 9, this.coin.height / 2 - 9);
+    this.obstacles = this.physics.add.staticGroup();
     this.placeCoin();
     this.drones = this.physics.add.group();
     for (let i = 0; i < c.droneCount; i++) {
@@ -46,6 +47,8 @@ class CoinDash extends Phaser.Scene {
       this.placeCoin();
     });
     this.physics.add.overlap(this.player, this.drones, (player, drone) => this.hitByDrone(drone));
+    this.physics.add.collider(this.player, this.obstacles);
+    this.physics.add.collider(this.drones, this.obstacles);
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true }));
@@ -144,7 +147,7 @@ class CoinDash extends Phaser.Scene {
       x = Phaser.Math.Between(25, c.width - 25);
       y = Phaser.Math.Between(70, c.height - 25);
     } while ((Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60
-      || this.nearDrone(x, y, 40)) && ++attempts < 50);
+      || this.nearDrone(x, y, 40) || this.nearObstacle(x, y, 28)) && ++attempts < 50);
     this.coin.setPosition(x, y);
     this.coin.body.reset(x, y);
   }
@@ -170,6 +173,44 @@ class CoinDash extends Phaser.Scene {
     return this.drones.getChildren().some(d => Phaser.Math.Distance.Between(x, y, d.x, d.y) < radius);
   }
 
+  // Distance from a point to the nearest wall's edge (0 if inside), so checks respect wall shape.
+  nearObstacle(x, y, radius) {
+    return this.obstacles.getChildren().some(o => {
+      const b = o.body;
+      const dx = Math.max(b.x - x, 0, x - b.right), dy = Math.max(b.y - y, 0, y - b.bottom);
+      return dx * dx + dy * dy < radius * radius;
+    });
+  }
+
+  // Walls stay a gap apart from each other and the arena edges, so the open floor is always
+  // one connected region the player fits through; nothing can be boxed in.
+  addObstacles(count) {
+    const c = COIN_DASH, gap = c.obstacleGap;
+    for (let n = 0; n < count && this.obstacles.getLength() < c.maxObstacles; n++) {
+      const kind = Phaser.Math.Between(0, c.obstacleSizes.length - 1);
+      const [w, h] = c.obstacleSizes[kind];
+      let x, y, ok = false;
+      for (let attempts = 0; attempts < 60 && !ok; attempts++) {
+        x = Phaser.Math.Between(gap + w / 2, c.width - gap - w / 2);
+        y = Phaser.Math.Between(44 + gap + h / 2, c.height - gap - h / 2);
+        // Grow the candidate by a margin and test what falls inside it.
+        const zone = d => new Phaser.Geom.Rectangle(x - w / 2 - d, y - h / 2 - d, w + d * 2, h + d * 2);
+        const near = (px, py, d) => zone(d).contains(px, py);
+        const spaced = zone(gap);
+        ok = !near(this.player.x, this.player.y, c.obstacleClearance)
+          && !this.drones.getChildren().some(d => near(d.x, d.y, 60))
+          && !near(this.coin.x, this.coin.y, 40)
+          && !this.obstacles.getChildren().some(o => Phaser.Geom.Intersects.RectangleToRectangle(spaced,
+            new Phaser.Geom.Rectangle(o.body.x, o.body.y, o.body.width, o.body.height)));
+      }
+      if (!ok) continue; // crowded arena: skip this wall rather than force an unfair spot
+      const obstacle = this.obstacles.create(x, y, `obstacle-${kind}`);
+      // Texture includes a glow margin; the wall itself is exactly w x h.
+      obstacle.body.setSize(w, h);
+      COIN_DASH_ART.emit('obstacle', this, { obstacle });
+    }
+  }
+
   levelUp() {
     const c = COIN_DASH;
     this.level++;
@@ -177,13 +218,17 @@ class CoinDash extends Phaser.Scene {
     COIN_DASH_ART.emit('levelup', this, { level: this.level });
     this.droneSpeed *= c.droneSpeedBoost;
     this.drones.getChildren().forEach(d => d.body.velocity.scale(c.droneSpeedBoost));
+    if (this.level >= c.obstacleStartLevel) {
+      this.addObstacles(this.level === c.obstacleStartLevel ? c.obstaclesFirst : c.obstaclesPerLevel);
+    }
     if (this.drones.getLength() >= c.maxDrones) return;
     // Spawn the new drone well away from the player.
     let x, y, attempts = 0;
     do {
       x = Phaser.Math.Between(30, c.width - 30);
       y = Phaser.Math.Between(75, c.height - 30);
-    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 150 && ++attempts < 50);
+    } while ((Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 150
+      || this.nearObstacle(x, y, 30)) && ++attempts < 50);
     this.addDrone(x, y, Phaser.Math.FloatBetween(0, Math.PI * 2), this.droneSpeed);
   }
 
