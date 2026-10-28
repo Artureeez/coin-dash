@@ -11,12 +11,17 @@ class CoinDash extends Phaser.Scene {
     this.paused = false;
     this.level = 1;
     this.droneSpeed = c.droneSpeed;
+    this.lives = c.lives;
+    this.invulnerableUntil = 0;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
-    this.levelText = this.add.text(c.width - 18, 12, 'Level 1', { font: '18px monospace', color: '#ffffff' })
+    this.levelText = this.add.text(c.width - 150, 12, 'Level 1', { font: '18px monospace', color: '#ffffff' })
       .setOrigin(1, 0);
+    this.livesText = this.add.text(c.width - 18, 12, '', { font: '18px monospace', color: '#ff657a' })
+      .setOrigin(1, 0);
+    this.updateLives();
     this.player = this.add.rectangle(c.width / 2, c.height / 2, 24, 24, c.colors.player);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
@@ -38,7 +43,7 @@ class CoinDash extends Phaser.Scene {
       if (this.score % c.coinsPerLevel === 0) this.levelUp();
       this.placeCoin();
     });
-    this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
+    this.physics.add.overlap(this.player, this.drones, () => this.hitByDrone());
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true }));
@@ -143,6 +148,25 @@ class CoinDash extends Phaser.Scene {
     drone.body.setCollideWorldBounds(true).setBounce(1, 1);
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
     drone.body.setVelocity(Math.cos(angle) * this.droneSpeed, Math.sin(angle) * this.droneSpeed);
+  }
+
+  hitByDrone() {
+    if (this.finished || this.time.now < this.invulnerableUntil) return;
+    this.lives--;
+    this.updateLives();
+    if (this.lives <= 0) return this.finish('A drone caught you!');
+    // Brief invulnerability so one touch costs only one life; the player blinks meanwhile.
+    const ms = COIN_DASH.invulnerableMs;
+    this.invulnerableUntil = this.time.now + ms;
+    this.tweens.add({
+      targets: this.player, alpha: 0.2, duration: 125, yoyo: true,
+      repeat: Math.max(0, Math.round(ms / 250) - 1),
+      onComplete: () => this.player.setAlpha(1)
+    });
+  }
+
+  updateLives() {
+    this.livesText.setText('Lives: ' + '\u2665'.repeat(Math.max(0, this.lives)));
   }
 
   update() {
