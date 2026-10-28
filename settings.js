@@ -12,5 +12,5 @@ window.COIN_DASH = {
   maxDrones: 8,
   lives: 3,
   invulnerableMs: 1500,
-  colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
+  colors: { background: 0x101c31, player: 0x71e8ce, player2: 0xc39bff, coin: 0xffd166, drone: 0xff657a }
 };

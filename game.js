@@ -8,15 +8,15 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     const art = COIN_DASH_ART;
     art.buildTextures(this);
-    this.score = 0;
+    // 'single', 'coop' (shared coins, own lives) or 'versus' (own coins, own lives).
+    this.mode = (data && data.mode) || 'single';
+    this.score = 0; // coins collected by everyone; drives level-ups in every mode
     this.best = this.loadBest();
     this.finished = false;
     this.started = false;
     this.paused = false;
     this.level = 1;
     this.droneSpeed = c.droneSpeed;
-    this.lives = c.lives;
-    this.invulnerableUntil = 0;
     // Drop the previous round's destroyed group so placeCoin() skips the drone check until new drones exist.
     this.drones = null;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
@@ -26,10 +26,11 @@ class CoinDash extends Phaser.Scene {
       .setOrigin(1, 0).setDepth(10);
     this.livesText = this.add.text(c.width - 18, 12, '',
       Object.assign({}, art.world.hudStyle, { color: '#ff657a' })).setOrigin(1, 0).setDepth(10);
+    const two = this.mode !== 'single';
+    this.players = (two ? [c.width / 2 - 60, c.width / 2 + 60] : [c.width / 2])
+      .map((x, i) => this.addPlayer(x, c.height / 2, i));
+    this.player = this.players[0];
     this.updateLives();
-    this.player = this.physics.add.image(c.width / 2, c.height / 2, 'player');
-    this.player.body.setSize(24, 24);
-    this.player.body.setCollideWorldBounds(true);
     this.coin = this.physics.add.image(100, 100, 'coin');
     this.coin.body.setCircle(9, this.coin.width / 2 - 9, this.coin.height / 2 - 9);
     this.placeCoin();
@@ -38,27 +39,46 @@ class CoinDash extends Phaser.Scene {
       const angle = (35 + i * 105) * Math.PI / 180;
       this.addDrone(90 + i * 270, 100, angle, c.droneSpeed);
     }
-    this.physics.add.overlap(this.player, this.coin, () => {
-      if (this.finished) return;
-      this.score++;
-      art.emit('coin', this, { x: this.coin.x, y: this.coin.y, score: this.score });
-      if (this.score % c.coinsPerLevel === 0) this.levelUp();
-      this.placeCoin();
+    this.players.forEach(p => {
+      this.physics.add.overlap(p, this.coin, () => this.collectCoin(p));
+      this.physics.add.overlap(p, this.drones, (player, drone) => this.hitByDrone(drone, player));
     });
-    this.physics.add.overlap(this.player, this.drones, (player, drone) => this.hitByDrone(drone));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
-    this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true }));
+    const wasd = { up: this.keys.W, down: this.keys.S, left: this.keys.A, right: this.keys.D };
+    // Two players split the keyboard; alone, either set works.
+    if (two) [this.players[0].controls, this.players[1].controls] = [[wasd], [this.cursors]];
+    else this.player.controls = [wasd, this.cursors];
+    this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true, mode: this.mode }));
     this.input.keyboard.on('keydown-SPACE', () => this.startRound());
     this.input.keyboard.on('keydown-ENTER', () => this.startRound());
     this.input.keyboard.on('keydown-P', () => this.togglePause());
+    ['ONE', 'TWO', 'THREE'].forEach((key, i) =>
+      this.input.keyboard.on('keydown-' + key, () => this.chooseMode(['single', 'coop', 'versus'][i])));
     art.emit('create', this);
     // First load waits on a start screen; R restarts straight into play.
     if (data && data.skipStart) this.startRound();
     else {
       this.physics.pause();
-      this.showOverlay('COIN DASH\nPress SPACE or ENTER to start\nP pauses');
+      this.showOverlay('COIN DASH\nSPACE or 1: solo  2: co-op  3: versus\n2P: P1 WASD, P2 arrows · P pauses');
     }
+  }
+
+  // Lives, coins and invulnerability live on each player, so co-op and versus need no extra bookkeeping.
+  addPlayer(x, y, index) {
+    const p = this.physics.add.image(x, y, 'player');
+    p.body.setSize(24, 24);
+    p.body.setCollideWorldBounds(true);
+    return Object.assign(p, { index, lives: COIN_DASH.lives, score: 0, invulnerableUntil: 0, out: false, dx: 0, dy: 0 });
+  }
+
+  livePlayers() { return this.players.filter(p => !p.out); }
+
+  // Players are built in create(), so picking a different mode needs a fresh scene.
+  chooseMode(mode) {
+    if (this.started) return;
+    if (mode === this.mode) this.startRound();
+    else this.scene.restart({ skipStart: true, mode });
   }
 
   // New drones are announced to art/ so they get the same look as the starting ones.
@@ -105,15 +125,25 @@ class CoinDash extends Phaser.Scene {
     this.overlay = null;
   }
 
+  collectCoin(p) {
+    if (this.finished || p.out) return;
+    this.score++;
+    p.score++;
+    // Versus effects follow the collector's own tally; otherwise the team's.
+    const score = this.mode === 'versus' ? p.score : this.score;
+    COIN_DASH_ART.emit('coin', this, { x: this.coin.x, y: this.coin.y, score, player: p });
+    if (this.score % COIN_DASH.coinsPerLevel === 0) this.levelUp();
+    this.placeCoin();
+  }
+
   placeCoin() {
     const c = COIN_DASH;
-    // Avoid spawning the next coin directly underneath the player.
+    // Avoid spawning the next coin directly underneath a player.
     let x, y, attempts = 0;
     do {
       x = Phaser.Math.Between(25, c.width - 25);
       y = Phaser.Math.Between(70, c.height - 25);
-    } while ((Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60
-      || this.nearDrone(x, y, 40)) && ++attempts < 50);
+    } while ((this.nearPlayer(x, y, 60) || this.nearDrone(x, y, 40)) && ++attempts < 50);
     this.coin.setPosition(x, y);
     this.coin.body.reset(x, y);
   }
@@ -133,6 +163,10 @@ class CoinDash extends Phaser.Scene {
     } catch (e) { /* storage unavailable; keep the in-memory best only */ }
   }
 
+  nearPlayer(x, y, radius) {
+    return this.livePlayers().some(p => Phaser.Math.Distance.Between(x, y, p.x, p.y) < radius);
+  }
+
   nearDrone(x, y, radius) {
     // Drones don't exist yet when the first coin is placed in create().
     if (!this.drones) return false;
@@ -146,29 +180,42 @@ class CoinDash extends Phaser.Scene {
     this.droneSpeed *= c.droneSpeedBoost;
     this.drones.getChildren().forEach(d => d.body.velocity.scale(c.droneSpeedBoost));
     if (this.drones.getLength() >= c.maxDrones) return;
-    // Spawn the new drone well away from the player.
+    // Spawn the new drone well away from the players.
     let x, y, attempts = 0;
     do {
       x = Phaser.Math.Between(30, c.width - 30);
       y = Phaser.Math.Between(75, c.height - 30);
-    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 150 && ++attempts < 50);
+    } while (this.nearPlayer(x, y, 150) && ++attempts < 50);
     this.addDrone(x, y, Phaser.Math.FloatBetween(0, Math.PI * 2), this.droneSpeed);
   }
 
-  hitByDrone(drone) {
-    if (this.finished || this.time.now < this.invulnerableUntil) return;
-    this.lives--;
+  hitByDrone(drone, p = this.player) {
+    if (this.finished || p.out || this.time.now < p.invulnerableUntil) return;
+    p.lives--;
+    // fatal = this player is out; the round only ends once nobody is left.
+    const fatal = p.lives <= 0;
+    if (fatal) {
+      p.out = true;
+      p.body.stop();
+      p.body.enable = false;
+    }
     this.updateLives();
-    const fatal = this.lives <= 0;
+    const roundOver = this.livePlayers().length === 0;
     // Brief invulnerability so one touch costs only one life; art/ blinks the player meanwhile.
     const ms = COIN_DASH.invulnerableMs;
-    if (!fatal) this.invulnerableUntil = this.time.now + ms;
-    COIN_DASH_ART.emit('hit', this, { drone, lives: this.lives, fatal, invulnerableMs: ms });
-    if (fatal) this.finish('A drone caught you!');
+    if (!fatal) p.invulnerableUntil = this.time.now + ms;
+    COIN_DASH_ART.emit('hit', this, { drone, player: p, lives: p.lives, fatal, roundOver, invulnerableMs: ms });
+    if (roundOver) this.finish(this.mode === 'single' ? 'A drone caught you!' : 'Both players are out!');
   }
 
   updateLives() {
-    this.livesText.setText('Lives: ' + '♥'.repeat(Math.max(0, this.lives)));
+    const hearts = p => p.out ? 'out' : '♥'.repeat(p.lives);
+    this.lives = this.player.lives; // single-player view, kept for older readers of scene.lives
+    this.livesText.setText(this.mode === 'single'
+      ? 'Lives: ' + hearts(this.player)
+      : this.players.map(p => `P${p.index + 1} ${hearts(p)}`).join('  '));
+    // Two lives readouts are wider, so keep the level label clear of them.
+    this.levelText.setX(this.livesText.x - this.livesText.width - 24);
   }
 
   update(time, delta) {
@@ -177,18 +224,23 @@ class CoinDash extends Phaser.Scene {
     const seconds = this.started
       ? Math.max(0, Math.ceil((this.deadline - (this.paused ? this.pausedAt : this.time.now)) / 1000))
       : COIN_DASH.roundSeconds;
-    let dx = 0, dy = 0;
     if (active) {
-      dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
-        - Number(this.cursors.left.isDown || this.keys.A.isDown);
-      dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
-        - Number(this.cursors.up.isDown || this.keys.W.isDown);
-      const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
-      this.player.body.setVelocity(direction.x, direction.y);
+      this.livePlayers().forEach(p => {
+        const held = dir => p.controls.some(k => k[dir].isDown);
+        p.dx = Number(held('right')) - Number(held('left'));
+        p.dy = Number(held('down')) - Number(held('up'));
+        const direction = new Phaser.Math.Vector2(p.dx, p.dy).normalize().scale(COIN_DASH.playerSpeed);
+        p.body.setVelocity(direction.x, direction.y);
+      });
     }
-    this.hud.setText(`Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`);
+    const [p1, p2] = this.players;
+    this.hud.setText(this.mode === 'single'
+      ? `Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`
+      : this.mode === 'coop' ? `Team coins: ${this.score}   Time: ${seconds}s`
+        : `P1: ${p1.score}   P2: ${p2.score}   Time: ${seconds}s`);
     // Art keeps animating on the start screen; while paused it holds still.
-    if (!this.paused) COIN_DASH_ART.emit('update', this, { time, delta, seconds, dx, dy });
+    // Each player's dx/dy is on its sprite; the payload keeps player 1's for older handlers.
+    if (!this.paused) COIN_DASH_ART.emit('update', this, { time, delta, seconds, dx: p1.dx, dy: p1.dy });
     if (active && seconds === 0) this.finish('Time is up!');
   }
 
@@ -196,15 +248,29 @@ class CoinDash extends Phaser.Scene {
     if (this.finished) return;
     this.finished = true;
     this.physics.pause();
+    if (this.mode !== 'single') return this.finishTwoPlayer(reason);
     const newBest = this.score > this.best;
     if (newBest) {
       this.best = this.score;
       this.saveBest(this.best);
     }
-    COIN_DASH_ART.emit('finish', this, { reason, score: this.score, best: this.best, newBest });
+    COIN_DASH_ART.emit('finish', this, { reason, score: this.score, best: this.best, newBest, mode: this.mode });
     COIN_DASH_ART.world.finishPanel(this,
       `${reason}\n${this.score} coins collected\nBest: ${this.best}\n`
         + `${newBest ? 'New high score!\n' : ''}Press R to try again`);
+  }
+
+  // Two-player rounds never touch the single-player high score.
+  finishTwoPlayer(reason) {
+    const [p1, p2] = this.players;
+    const mode = this.mode;
+    const winner = mode === 'versus' && p1.score !== p2.score ? (p1.score > p2.score ? p1 : p2) : null;
+    COIN_DASH_ART.emit('finish', this, { reason, score: this.score, best: this.best, newBest: false, mode, winner });
+    const again = `Press R to play ${mode === 'coop' ? 'co-op' : 'versus'} again`;
+    COIN_DASH_ART.world.finishPanel(this, mode === 'coop'
+      ? `${reason}\n${this.score} coins as a team\n${again}`
+      : `${winner ? `Player ${winner.index + 1} wins!` : "It's a tie!"}\n`
+        + `P1 ${p1.score} : ${p2.score} P2\n${reason}\n${again}`);
   }
 }
 window.coinDashGame = new Phaser.Game({
