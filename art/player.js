@@ -149,7 +149,6 @@ COIN_DASH_ART.on('hit', scene => {
   st.shell.setTintFill(0xffffff);
   scene.time.delayedCall(90, () => st.shell.clearTint());
   st.burst.explode(22, st.skin.x, st.skin.y);
-  scene.cameras.main.shake(180, 0.006);
   scene.tweens.add({ targets: st.skin, scaleX: 1, scaleY: 1, angle: -12, duration: 160, ease: 'Back.easeOut' });
 });
 
