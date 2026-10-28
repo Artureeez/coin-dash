@@ -2,12 +2,13 @@
 class CoinDash extends Phaser.Scene {
   constructor() { super('CoinDash'); }
 
-  create() {
+  create(data) {
     const c = COIN_DASH;
     this.score = 0;
     this.best = this.loadBest();
     this.finished = false;
-    this.deadline = this.time.now + c.roundSeconds * 1000;
+    this.started = false;
+    this.paused = false;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
@@ -35,7 +36,54 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
-    this.input.keyboard.on('keydown-R', () => this.scene.restart());
+    this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true }));
+    this.input.keyboard.on('keydown-SPACE', () => this.startRound());
+    this.input.keyboard.on('keydown-ENTER', () => this.startRound());
+    this.input.keyboard.on('keydown-P', () => this.togglePause());
+    // First load waits on a start screen; R restarts straight into play.
+    if (data && data.skipStart) this.startRound();
+    else {
+      this.physics.pause();
+      this.showOverlay('COIN DASH\nPress SPACE or ENTER to start\nP pauses');
+    }
+  }
+
+  startRound() {
+    if (this.started) return;
+    this.started = true;
+    this.deadline = this.time.now + COIN_DASH.roundSeconds * 1000;
+    this.hideOverlay();
+    this.physics.resume();
+  }
+
+  togglePause() {
+    if (!this.started || this.finished) return;
+    this.paused = !this.paused;
+    if (this.paused) {
+      this.pausedAt = this.time.now;
+      this.physics.pause();
+      this.showOverlay('Paused\nPress P to resume');
+    } else {
+      // Shift the deadline so time spent paused is not lost.
+      this.deadline += this.time.now - this.pausedAt;
+      this.hideOverlay();
+      this.physics.resume();
+    }
+  }
+
+  showOverlay(message) {
+    const c = COIN_DASH;
+    this.hideOverlay();
+    this.overlay = [
+      this.add.rectangle(c.width / 2, c.height / 2, 460, 150, 0x0a1120, 0.95),
+      this.add.text(c.width / 2, c.height / 2, message,
+        { font: '24px monospace', color: '#ffffff', align: 'center', lineSpacing: 12 }).setOrigin(0.5)
+    ];
+  }
+
+  hideOverlay() {
+    if (this.overlay) this.overlay.forEach((item) => item.destroy());
+    this.overlay = null;
   }
 
   placeCoin() {
@@ -66,7 +114,7 @@ class CoinDash extends Phaser.Scene {
   }
 
   update() {
-    if (this.finished) return;
+    if (this.finished || !this.started || this.paused) return;
     const dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
