@@ -13,6 +13,8 @@ class CoinDash extends Phaser.Scene {
     this.droneSpeed = c.droneSpeed;
     this.lives = c.lives;
     this.invulnerableUntil = 0;
+    // Drop the previous round's destroyed group so placeCoin() skips the drone check until new drones exist.
+    this.drones = null;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
