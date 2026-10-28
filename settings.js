@@ -24,5 +24,6 @@ window.COIN_DASH = {
   droneWobble: 0.35,         // rad of per-drone weave around the direct line to the target
   droneSeparation: 70,       // px; drones closer than this push their headings apart
   droneSeparationWeight: 1.5,
-  colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a, obstacle: 0x9b8cff }
+  // player2 is blue rather than violet so it can't be mistaken for an obstacle.
+  colors: { background: 0x101c31, player: 0x71e8ce, player2: 0x5aa9ff, coin: 0xffd166, drone: 0xff657a, obstacle: 0x9b8cff }
 };
