@@ -9,10 +9,10 @@ const PLAYER_EYE = 0xeafffb;
 const PLAYER_HURT = 0xff8fa0;
 const PLAYER_OUT = 0x6b7486;
 const PLAYER_SIZE = 32; // 28px visible incl. outline, centred on the 24px hitbox
-// One palette per player index: teal for P1, violet for P2, so they never get mixed up.
+// One palette per player index: teal for P1, blue for P2 (violet belongs to the walls).
 const PLAYER_VARIANTS = [
   { shell: 'player-shell', body: () => COIN_DASH.colors.player, shade: 0x3fb8a0, outline: 0x0b3b3c },
-  { shell: 'player2-shell', body: () => COIN_DASH.colors.player2, shade: 0x8f63d9, outline: 0x2a1450 }
+  { shell: 'player2-shell', body: () => COIN_DASH.colors.player2, shade: 0x3a7bd5, outline: 0x0f2650 }
 ];
 
 // Rounded body with an outline, a darker underside and a glossy highlight.

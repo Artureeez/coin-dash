@@ -7,6 +7,9 @@ window.COIN_DASH = {
   droneSpeed: 105,
   droneCount: 3,
   highScoreKey: 'coinDash.highScore',
+  highScoreNameKey: 'coinDash.highScoreName',
+  playerNamesKey: 'coinDash.playerNames',
+  nameMaxLength: 12,
   coinsPerLevel: 10,     // every N coins a drone joins and drones speed up
   droneSpeedBoost: 1.1,  // drone speed multiplier per level
   maxDrones: 8,

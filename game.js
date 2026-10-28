@@ -12,6 +12,9 @@ class CoinDash extends Phaser.Scene {
     this.mode = (data && data.mode) || 'single';
     this.score = 0; // coins collected by everyone; drives level-ups in every mode
     this.best = this.loadBest();
+    this.bestBy = this.loadText(c.highScoreNameKey);
+    // Names ride along on restart so R never asks again; first load pre-fills the last ones used.
+    this.names = (data && data.names) || this.loadNames();
     this.finished = false;
     this.started = false;
     this.paused = false;
@@ -52,7 +55,10 @@ class CoinDash extends Phaser.Scene {
     // Two players split the keyboard; alone, either set works.
     if (two) [this.players[0].controls, this.players[1].controls] = [[wasd], [this.cursors]];
     else this.player.controls = [wasd, this.cursors];
-    this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true, mode: this.mode }));
+    this.input.keyboard.on('keydown-R', () => {
+      this.confirmNames();
+      this.scene.restart({ skipStart: true, mode: this.mode, names: this.names });
+    });
     this.input.keyboard.on('keydown-SPACE', () => this.startRound());
     this.input.keyboard.on('keydown-ENTER', () => this.startRound());
     this.input.keyboard.on('keydown-P', () => this.togglePause());
@@ -63,11 +69,14 @@ class CoinDash extends Phaser.Scene {
     if (data && data.skipStart) this.startRound();
     else {
       this.physics.pause();
+      // The prompt line is left empty: the HTML name entry and mode buttons sit in its place.
       this.overlay = COIN_DASH_ART.world.rulesScreen(this, {
-        title: 'COIN DASH', best: this.best, rules: this.rules(), controls: this.controls(),
-        prompt: 'SPACE or 1: solo   ·   2: co-op   ·   3: versus'
+        title: 'COIN DASH', best: `${this.best}${this.byLine().toUpperCase()}`,
+        rules: this.rules(), controls: this.controls(), prompt: ''
       });
+      this.showNameEntry(this.players.length);
     }
+    this.events.once('shutdown', () => this.removeNameEntry());
   }
 
   // Start-screen text as data, built from settings so it stays true when tuning changes.
@@ -105,11 +114,12 @@ class CoinDash extends Phaser.Scene {
 
   livePlayers() { return this.players.filter(p => !p.out); }
 
-  // Players are built in create(), so picking a different mode needs a fresh scene.
+  // Players are built in create(), so picking a different mode needs a fresh scene. It reopens
+  // the start screen so the second player can type a name before the round begins.
   chooseMode(mode) {
-    if (this.started) return;
-    if (mode === this.mode) this.startRound();
-    else this.scene.restart({ skipStart: true, mode });
+    if (this.started || mode === this.mode) return;
+    this.confirmNames();
+    this.scene.restart({ mode, names: this.names });
   }
 
   // New drones are announced to art/ so they get the same look as the starting ones.
@@ -130,6 +140,7 @@ class CoinDash extends Phaser.Scene {
   startRound() {
     if (this.started) return;
     this.started = true;
+    this.confirmNames();
     this.deadline = this.time.now + COIN_DASH.roundSeconds * 1000;
     this.hideOverlay();
     this.physics.resume();
@@ -184,6 +195,91 @@ class CoinDash extends Phaser.Scene {
       && ++attempts < 50);
     this.coin.setPosition(x, y);
     this.coin.body.reset(x, y);
+  }
+
+  // Name entry is an HTML <input> over the canvas, so any keyboard layout or IME just works.
+  // One field per player, plus clickable mode buttons: 1/2/3 typed into a field stay part of the name.
+  showNameEntry(count) {
+    const box = document.createElement('div');
+    box.className = 'name-entry';
+    this.nameInputs = [];
+    for (let i = 0; i < count; i++) {
+      const label = document.createElement('label');
+      label.textContent = count > 1 ? `Player ${i + 1}` : 'Your name';
+      const input = document.createElement('input');
+      Object.assign(input, { type: 'text', maxLength: COIN_DASH.nameMaxLength, value: this.names[i] || '',
+        placeholder: this.defaultName(i, count), autocomplete: 'off', spellcheck: false });
+      label.appendChild(input);
+      box.appendChild(label);
+      this.nameInputs.push(input);
+    }
+    const modes = document.createElement('div');
+    modes.className = 'modes';
+    [['single', 'Solo'], ['coop', 'Co-op'], ['versus', 'Versus']].forEach(([mode, text], i) => {
+      const button = document.createElement('button');
+      Object.assign(button, { type: 'button', textContent: `${i + 1} ${text}`, title: `Press ${i + 1}` });
+      if (mode === this.mode) button.className = 'active';
+      button.addEventListener('click', () => this.chooseMode(mode));
+      modes.appendChild(button);
+    });
+    const start = document.createElement('button');
+    Object.assign(start, { type: 'button', className: 'start', textContent: '▶ Enter' });
+    start.addEventListener('click', () => this.startRound());
+    modes.appendChild(start);
+    box.appendChild(modes);
+    // Phaser hears keys on window; stopping them here keeps typed letters (R, P, SPACE...) out of the game.
+    ['keydown', 'keyup', 'keypress'].forEach(type => box.addEventListener(type, (e) => {
+      e.stopPropagation();
+      if (type === 'keydown' && e.key === 'Enter') { e.preventDefault(); this.startRound(); }
+    }));
+    document.getElementById('game').appendChild(box);
+    this.nameEntry = box;
+    this.nameInputs[0].focus();
+    this.nameInputs[0].select();
+  }
+
+  removeNameEntry() {
+    if (this.nameEntry) this.nameEntry.remove();
+    this.nameEntry = this.nameInputs = null;
+  }
+
+  // Reads the fields if still up (ENTER, SPACE after clicking away, or R), then remembers them.
+  confirmNames() {
+    if (!this.nameInputs) return;
+    // Solo shows one field; keep player 2's saved name for the next two-player round.
+    // Blank stays blank so the field shows the right placeholder ("Player" / "Player 1") next time.
+    this.names = this.names.slice();
+    this.nameInputs.forEach((input, i) => {
+      this.names[i] = input.value.replace(/\s+/g, ' ').trim().slice(0, COIN_DASH.nameMaxLength);
+    });
+    this.saveText(COIN_DASH.playerNamesKey, JSON.stringify(this.names));
+    this.removeNameEntry();
+  }
+
+  defaultName(i, count) { return count > 1 ? `Player ${i + 1}` : 'Player'; }
+
+  nameOf(p) { return this.names[p.index] || this.defaultName(p.index, this.players.length); }
+
+  playerLabel() { return this.players.map(p => this.nameOf(p)).join(' & '); }
+
+  byLine() { return this.bestBy ? ` by ${this.bestBy}` : ''; }
+
+  loadNames() {
+    try {
+      const names = JSON.parse(this.loadText(COIN_DASH.playerNamesKey) || '[]');
+      return Array.isArray(names) ? names.map(String) : [];
+    } catch (e) {
+      return []; // corrupt entry; start blank
+    }
+  }
+
+  // Same storage caveats as loadBest/saveBest.
+  loadText(key) {
+    try { return window.localStorage.getItem(key) || ''; } catch (e) { return ''; }
+  }
+
+  saveText(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (e) { /* keep in memory only */ }
   }
 
   loadBest() {
@@ -353,9 +449,9 @@ class CoinDash extends Phaser.Scene {
     }
     const [p1, p2] = this.players;
     this.hud.setText(this.mode === 'single'
-      ? `Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`
+      ? `${this.nameOf(p1)}  Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`
       : this.mode === 'coop' ? `Team coins: ${this.score}   Time: ${seconds}s`
-        : `P1: ${p1.score}   P2: ${p2.score}   Time: ${seconds}s`);
+        : `${this.nameOf(p1)}: ${p1.score}   ${this.nameOf(p2)}: ${p2.score}   Time: ${seconds}s`);
     // Art keeps animating on the start screen; while paused it holds still.
     // Each player's dx/dy is on its sprite; the payload keeps player 1's for older handlers.
     if (!this.paused) COIN_DASH_ART.emit('update', this, { time, delta, seconds, dx: p1.dx, dy: p1.dy });
@@ -370,11 +466,13 @@ class CoinDash extends Phaser.Scene {
     const newBest = this.score > this.best;
     if (newBest) {
       this.best = this.score;
+      this.bestBy = this.playerLabel();
       this.saveBest(this.best);
+      this.saveText(COIN_DASH.highScoreNameKey, this.bestBy);
     }
     COIN_DASH_ART.emit('finish', this, { reason, score: this.score, best: this.best, newBest, mode: this.mode });
     COIN_DASH_ART.world.finishPanel(this,
-      `${reason}\n${this.score} coins collected\nBest: ${this.best}\n`
+      `${reason}\n${this.score} coins by ${this.playerLabel()}\nBest: ${this.best}${this.byLine()}\n`
         + `${newBest ? 'New high score!\n' : ''}Press R to try again`);
   }
 
@@ -386,9 +484,9 @@ class CoinDash extends Phaser.Scene {
     COIN_DASH_ART.emit('finish', this, { reason, score: this.score, best: this.best, newBest: false, mode, winner });
     const again = `Press R to play ${mode === 'coop' ? 'co-op' : 'versus'} again`;
     COIN_DASH_ART.world.finishPanel(this, mode === 'coop'
-      ? `${reason}\n${this.score} coins as a team\n${again}`
-      : `${winner ? `Player ${winner.index + 1} wins!` : "It's a tie!"}\n`
-        + `P1 ${p1.score} : ${p2.score} P2\n${reason}\n${again}`);
+      ? `${reason}\n${this.score} coins by ${this.playerLabel()}\n${again}`
+      : `${winner ? `${this.nameOf(winner)} wins!` : "It's a tie!"}\n`
+        + `${this.nameOf(p1)} ${p1.score} : ${p2.score} ${this.nameOf(p2)}\n${reason}\n${again}`);
   }
 }
 window.coinDashGame = new Phaser.Game({

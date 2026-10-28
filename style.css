@@ -66,8 +66,76 @@ h1 span {
     0 0 32px 6px rgba(113, 232, 206, .14),
     0 24px 50px rgba(0, 0, 0, .55);
   overflow: hidden;
+  position: relative; /* anchors the name entry over the canvas */
+  container-type: inline-size; /* cqw units below follow the scaled canvas width */
 }
 canvas { display: block; }
+
+/* Start-screen name entry and mode buttons: HTML floated over the start panel's prompt line.
+   Sized in cqw (1cqw = 8px at full 800px width) so it scales with Phaser's FIT canvas. */
+.name-entry {
+  position: absolute;
+  left: 50%;
+  top: 88.5%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 1.6cqw;
+  white-space: nowrap;
+}
+.name-entry label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .6cqw;
+  color: var(--teal);
+  font: 600 1.25cqw/1 var(--mono);
+  letter-spacing: .25em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(113, 232, 206, .5);
+}
+.name-entry input {
+  width: 9em;
+  padding: .7cqw 1cqw;
+  border: 1px solid rgba(113, 232, 206, .55);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(7, 13, 26, .92);
+  color: #f2fffb;
+  caret-color: var(--gold);
+  font: 700 1.9cqw/1.2 var(--mono);
+  letter-spacing: .06em;
+  text-align: center;
+  box-shadow: 0 0 0 3px rgba(113, 232, 206, .08), 0 0 18px rgba(113, 232, 206, .18);
+}
+.name-entry input::placeholder { color: #4d607c; }
+.name-entry input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(113, 232, 206, .18), 0 0 22px rgba(113, 232, 206, .35);
+}
+.name-entry .modes { display: flex; gap: .6cqw; }
+.name-entry button {
+  padding: .8cqw 1cqw;
+  border: 1px solid rgba(113, 232, 206, .35);
+  border-radius: 8px;
+  background: #13213a;
+  color: #8fa1ba;
+  font: 700 1.45cqw/1.2 var(--mono);
+  cursor: pointer;
+}
+.name-entry button:hover { color: #e9fffa; border-color: var(--teal); }
+.name-entry button.active {
+  color: #07101e;
+  background: var(--teal);
+  border-color: var(--teal);
+  box-shadow: 0 0 14px rgba(113, 232, 206, .45);
+}
+.name-entry button.start {
+  margin-left: .8cqw;
+  color: var(--gold);
+  border-color: rgba(255, 209, 102, .6);
+  text-shadow: 0 0 8px rgba(255, 209, 102, .5);
+}
 
 .controls {
   margin: 20px 0 0;
