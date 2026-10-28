@@ -66,8 +66,50 @@ h1 span {
     0 0 32px 6px rgba(113, 232, 206, .14),
     0 24px 50px rgba(0, 0, 0, .55);
   overflow: hidden;
+  position: relative; /* anchors the name entry over the canvas */
 }
 canvas { display: block; }
+
+/* Start-screen name entry: an HTML field floated over the arena, above the start panel.
+   Positioned in % of the canvas so it tracks Phaser's FIT scaling. */
+.name-entry {
+  position: absolute;
+  left: 50%;
+  top: 21%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 14px;
+}
+.name-entry label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--teal);
+  font: 600 11px/1 var(--mono);
+  letter-spacing: .25em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(113, 232, 206, .5);
+}
+.name-entry input {
+  width: 12.5em;
+  padding: 7px 12px;
+  border: 1px solid rgba(113, 232, 206, .55);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(7, 13, 26, .92);
+  color: #f2fffb;
+  caret-color: var(--gold);
+  font: 700 18px/1.2 var(--mono);
+  letter-spacing: .06em;
+  text-align: center;
+  box-shadow: 0 0 0 3px rgba(113, 232, 206, .08), 0 0 18px rgba(113, 232, 206, .18);
+}
+.name-entry input::placeholder { color: #4d607c; }
+.name-entry input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(113, 232, 206, .18), 0 0 22px rgba(113, 232, 206, .35);
+}
 
 .controls {
   margin: 20px 0 0;

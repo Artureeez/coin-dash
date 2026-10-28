@@ -10,6 +10,9 @@ class CoinDash extends Phaser.Scene {
     art.buildTextures(this);
     this.score = 0;
     this.best = this.loadBest();
+    this.bestBy = this.loadText(c.highScoreNameKey);
+    // Names ride along on restart so R never asks again; first load pre-fills the last ones used.
+    this.names = (data && data.names) || this.loadNames();
     this.finished = false;
     this.started = false;
     this.paused = false;
@@ -48,7 +51,10 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.drones, (player, drone) => this.hitByDrone(drone));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
-    this.input.keyboard.on('keydown-R', () => this.scene.restart({ skipStart: true }));
+    this.input.keyboard.on('keydown-R', () => {
+      this.confirmNames();
+      this.scene.restart({ skipStart: true, names: this.names });
+    });
     this.input.keyboard.on('keydown-SPACE', () => this.startRound());
     this.input.keyboard.on('keydown-ENTER', () => this.startRound());
     this.input.keyboard.on('keydown-P', () => this.togglePause());
@@ -57,8 +63,11 @@ class CoinDash extends Phaser.Scene {
     if (data && data.skipStart) this.startRound();
     else {
       this.physics.pause();
-      this.showOverlay('COIN DASH\nPress SPACE or ENTER to start\nP pauses');
+      this.showOverlay('COIN DASH\nType your name, then press ENTER\n'
+        + (this.best ? `Best: ${this.best}${this.byLine()}   ` : '') + 'P pauses');
+      this.showNameEntry(1);
     }
+    this.events.once('shutdown', () => this.removeNameEntry());
   }
 
   // New drones are announced to art/ so they get the same look as the starting ones.
@@ -75,6 +84,7 @@ class CoinDash extends Phaser.Scene {
   startRound() {
     if (this.started) return;
     this.started = true;
+    this.confirmNames();
     this.deadline = this.time.now + COIN_DASH.roundSeconds * 1000;
     this.hideOverlay();
     this.physics.resume();
@@ -116,6 +126,72 @@ class CoinDash extends Phaser.Scene {
       || this.nearDrone(x, y, 40)) && ++attempts < 50);
     this.coin.setPosition(x, y);
     this.coin.body.reset(x, y);
+  }
+
+  // Name entry is an HTML <input> over the canvas, so any keyboard layout or IME just works.
+  // One field per player: a second player's name is showNameEntry(2).
+  showNameEntry(count) {
+    const box = document.createElement('div');
+    box.className = 'name-entry';
+    this.nameInputs = [];
+    for (let i = 0; i < count; i++) {
+      const label = document.createElement('label');
+      label.textContent = count > 1 ? `Player ${i + 1}` : 'Your name';
+      const input = document.createElement('input');
+      Object.assign(input, { type: 'text', maxLength: COIN_DASH.nameMaxLength, value: this.names[i] || '',
+        placeholder: this.defaultName(i, count), autocomplete: 'off', spellcheck: false });
+      label.appendChild(input);
+      box.appendChild(label);
+      this.nameInputs.push(input);
+    }
+    // Phaser hears keys on window; stopping them here keeps typed letters (R, P, SPACE...) out of the game.
+    ['keydown', 'keyup', 'keypress'].forEach(type => box.addEventListener(type, (e) => {
+      e.stopPropagation();
+      if (type === 'keydown' && e.key === 'Enter') { e.preventDefault(); this.startRound(); }
+    }));
+    document.getElementById('game').appendChild(box);
+    this.nameEntry = box;
+    this.nameInputs[0].focus();
+    this.nameInputs[0].select();
+  }
+
+  removeNameEntry() {
+    if (this.nameEntry) this.nameEntry.remove();
+    this.nameEntry = this.nameInputs = null;
+  }
+
+  // Reads the fields if still up (ENTER, SPACE after clicking away, or R), then remembers them.
+  confirmNames() {
+    if (!this.nameInputs) return;
+    const count = this.nameInputs.length;
+    this.names = this.nameInputs.map((input, i) =>
+      input.value.replace(/\s+/g, ' ').trim().slice(0, COIN_DASH.nameMaxLength) || this.defaultName(i, count));
+    this.saveText(COIN_DASH.playerNamesKey, JSON.stringify(this.names));
+    this.removeNameEntry();
+  }
+
+  defaultName(i, count) { return count > 1 ? `Player ${i + 1}` : 'Player'; }
+
+  playerLabel() { return this.names.join(' & ') || 'Player'; }
+
+  byLine() { return this.bestBy ? ` by ${this.bestBy}` : ''; }
+
+  loadNames() {
+    try {
+      const names = JSON.parse(this.loadText(COIN_DASH.playerNamesKey) || '[]');
+      return Array.isArray(names) ? names.map(String) : [];
+    } catch (e) {
+      return []; // corrupt entry; start blank
+    }
+  }
+
+  // Same storage caveats as loadBest/saveBest.
+  loadText(key) {
+    try { return window.localStorage.getItem(key) || ''; } catch (e) { return ''; }
+  }
+
+  saveText(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (e) { /* keep in memory only */ }
   }
 
   loadBest() {
@@ -186,7 +262,7 @@ class CoinDash extends Phaser.Scene {
       const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
       this.player.body.setVelocity(direction.x, direction.y);
     }
-    this.hud.setText(`Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`);
+    this.hud.setText(`${this.playerLabel()}  Coins: ${this.score}   Best: ${Math.max(this.best, this.score)}   Time: ${seconds}s`);
     // Art keeps animating on the start screen; while paused it holds still.
     if (!this.paused) COIN_DASH_ART.emit('update', this, { time, delta, seconds, dx, dy });
     if (active && seconds === 0) this.finish('Time is up!');
@@ -199,11 +275,13 @@ class CoinDash extends Phaser.Scene {
     const newBest = this.score > this.best;
     if (newBest) {
       this.best = this.score;
+      this.bestBy = this.playerLabel();
       this.saveBest(this.best);
+      this.saveText(COIN_DASH.highScoreNameKey, this.bestBy);
     }
     COIN_DASH_ART.emit('finish', this, { reason, score: this.score, best: this.best, newBest });
     COIN_DASH_ART.world.finishPanel(this,
-      `${reason}\n${this.score} coins collected\nBest: ${this.best}\n`
+      `${reason}\n${this.score} coins by ${this.playerLabel()}\nBest: ${this.best}${this.byLine()}\n`
         + `${newBest ? 'New high score!\n' : ''}Press R to try again`);
   }
 }
