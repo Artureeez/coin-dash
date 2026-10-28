@@ -78,11 +78,13 @@ class CoinDash extends Phaser.Scene {
     this.deadline = this.time.now + COIN_DASH.roundSeconds * 1000;
     this.hideOverlay();
     this.physics.resume();
+    COIN_DASH_ART.emit('start', this, {});
   }
 
   togglePause() {
     if (!this.started || this.finished) return;
     this.paused = !this.paused;
+    COIN_DASH_ART.emit('pause', this, { paused: this.paused });
     if (this.paused) {
       this.pausedAt = this.time.now;
       this.physics.pause();
@@ -143,6 +145,7 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     this.level++;
     this.levelText.setText(`Level ${this.level}`);
+    COIN_DASH_ART.emit('levelup', this, { level: this.level });
     this.droneSpeed *= c.droneSpeedBoost;
     this.drones.getChildren().forEach(d => d.body.velocity.scale(c.droneSpeedBoost));
     if (this.drones.getLength() >= c.maxDrones) return;

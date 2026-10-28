@@ -8,7 +8,8 @@ window.COIN_DASH_ART = {
   // fn(scene) should draw with scene.make.graphics(...) and call generateTexture(key, w, h).
   texture(fn) { this.textureMakers.push(fn); },
 
-  // Events emitted by game.js: 'create', 'update', 'coin', 'hit', 'finish'.
+  // Events emitted by game.js: 'create', 'update', 'coin', 'hit', 'finish', 'drone',
+  // 'start', 'pause' {paused}, 'levelup' {level}.
   on(event, fn) { (this.handlers[event] = this.handlers[event] || []).push(fn); },
 
   // Textures live on the game, not the scene, so they survive a restart; build them once.
